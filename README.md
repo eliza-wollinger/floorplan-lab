@@ -1,4 +1,4 @@
-# floorplan-lab
+![banner](assets/banner/floorplan-lab-banner.jpg)
 
 **A browser-based workspace for exploring tile and wood flooring layouts, and estimating how much material you actually need.**
 
