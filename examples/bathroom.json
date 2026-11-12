@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "rooms": [
+    {
+      "name": "Bathroom",
+      "w": 2400,
+      "h": 3000,
+      "split": "horizontal",
+      "at": 2000,
+      "materials": [
+        {
+          "preset": "large",
+          "w": 600,
+          "h": 1200,
+          "joint": 3,
+          "angle": 0,
+          "ox": 0,
+          "oy": 0,
+          "pattern": "straight",
+          "reserve": 10,
+          "box": 3,
+          "price": 0
+        },
+        {
+          "preset": "small",
+          "w": 200,
+          "h": 200,
+          "joint": 3,
+          "angle": 0,
+          "ox": 0,
+          "oy": 0,
+          "pattern": "straight",
+          "reserve": 10,
+          "box": 25,
+          "price": 0
+        }
+      ]
+    }
+  ]
+}
