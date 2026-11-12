@@ -2,7 +2,7 @@
 
 A monochrome, browser-based workspace for exploring tile and wood flooring layouts and estimating materials. Built with native JavaScript modules, SVG and CSS; no runtime dependencies or backend.
 
-**Version 0.1 — functional prototype.** Rooms are currently rectangular, displayed one at a time. This is the first working slice of a broader floor planning application, not a complete CAD system.
+**Version 0.2 — functional prototype.** Rooms are currently rectangular, displayed one at a time. This is the first working slice of a broader floor planning application, not a complete CAD system.
 
 ## What works
 
@@ -13,6 +13,9 @@ A monochrome, browser-based workspace for exploring tile and wood flooring layou
 - Geometric clipping at room and region boundaries; cut-piece hatching.
 - Room area, full/cut piece counts and cutting offcut area.
 - Per-area reserve, box quantity and cost in BRL.
+- Separate Pan view and Move layout tools: drag the pattern inside an area without moving the room.
+- Live quantity updates while dragging; each completed drag is one undo step.
+- Optimize layout: background origin search, optional angle comparison, visual before/after preview, Apply or Keep current.
 - Pan, zoom, optional grid, undo/redo (session only).
 - Browser-local autosave; JSON project export/import and SVG drawing export.
 - Responsive stacked layout for smaller screens.
@@ -58,15 +61,33 @@ One fresh source piece is assumed for each cut. Offcut reuse, saw kerf, breakage
 
 The bottom summary describes the **current room**. Purchase estimates describe the **selected area** only. Products are not pooled across rooms or regions yet; there is no project-wide purchasing total.
 
+## Layout optimization (v0.2)
+
+Choose **Move layout** and drag inside the desired area. The area is selected automatically, and its origin changes while the room boundary stays fixed. Release to save. Escape cancels an in-progress drag. **Pan view** moves only the drawing viewport. Numeric X/Y origin controls remain available.
+
+Choose **Optimize layout → Find best fit** for the selected area. By default its angle is locked. The optional checkbox also tests 0°, 45° and 90°, in addition to the current angle. Review current/best drawings and quantities, then apply or keep the original. Apply is one undo step. Closing the dialog cancels a running worker.
+
+The deterministic heuristic samples an 8 × 8 origin grid for each angle, then performs three 5 × 5 refinements around the best sampled origin for that angle. Running bond uses a two-row period. Duplicate candidates are skipped. Rotation is accounted for when converting local tile-grid offsets to world coordinates. Candidate workload limits match the geometry engine.
+
+The objective is lexicographic: minimize source-piece count, then cut-piece count, then cutting offcut area. The original layout is always a candidate; proposals cannot worsen this objective. This is **best found**, not a proof of global optimality. It does not optimize reuse, kerf, a minimum strip width, installation constraints, or several areas together. Identical box counts can remain even when fewer source pieces are needed.
+
+The search runs in a module Web Worker to avoid blocking pointer/UI input. Include `optimizer.js` and `optimizer-worker.js` when publishing. No external libraries or API services are used.
+
+Existing v0.1 JSON projects and browser autosaves remain compatible (project schema version 1). Undo history is session-only. The v0.2 offset range is ±10,000 mm; projects using larger offsets than ±3,000 mm may not open in v0.1.
+
 ## Structure
 
 - `index.html`: editor controls and semantic UI.
 - `style.css`: monochrome responsive layout.
 - `app.js`: state, interaction, history, persistence and SVG rendering.
 - `geometry.js`: independent clipping, layout and quantity calculations.
+- `optimizer.js`: pure candidate search and ranking.
+- `optimizer-worker.js`: background search/progress messaging.
+- `tests/optimizer.test.mjs`: improvements, unchanged optimum, fixed angle, rotation, reproducible metrics and ranking.
 - `tests/geometry.test.mjs`: exact grids, partial cuts, rotations, staggered layouts, joints, region partition, limits and reserve rounding.
 - `server.mjs`: dependency-free development HTTP server.
 - `examples/bathroom.json`: two-area sample, opened through **Open project**.
+- `examples/optimization-demo.json`: offset grid that improves from nine source pieces to four.
 
 All files remain local to the browser unless explicitly exported. Clearing browser storage removes autosaved work. Export JSON for a durable backup. Imported JSON is validated and limited to 2 MB; excessive tile counts are rejected to protect the UI.
 
@@ -83,4 +104,4 @@ All files remain local to the browser unless explicitly exported. Clearing brows
 
 ## Verification
 
-Eight automated geometry tests pass. Desktop browser checks cover area selection, independent materials, keyboard-entered rotation, undo/redo, persistence after reload and JSON/SVG downloads. Mobile CSS is included but has not been tested on a physical mobile device. This release has not been deployed to the user's GitHub repository.
+Fourteen automated geometry/optimization tests pass. v0.2 desktop browser checks cover direct pattern dragging, one-step undo/redo, fixed-angle and optional-angle search, comparison previews, applying a suggestion, undoing it, and keeping the current layout. v0.1 browser checks covered independent materials, persistence and JSON/SVG downloads; these were not all repeated in v0.2. Mobile CSS is included but has not been tested on a physical mobile device. This release has not been deployed to the user's GitHub repository.

@@ -3,7 +3,8 @@ const $=id=>document.getElementById(id),clone=v=>JSON.parse(JSON.stringify(v));
 const material=()=>({preset:'square',w:600,h:600,joint:3,angle:0,ox:0,oy:0,pattern:'straight',reserve:10,box:4,price:0});
 const room=(name='Living room')=>({name,w:4800,h:3600,split:'none',at:2400,materials:[material(),material()]});
 let project={version:1,rooms:[room()]},selected=0,zone=0,history=[],future=[],results=[],showGrid=true,showCuts=true;
-let view={x:-1000,y:-1000,w:6800,h:5600},baseWidth=6800,drag=null;
+let view={x:-1000,y:-1000,w:6800,h:5600},baseWidth=6800,drag=null,tool='pan',dragFrame=null;
+let optimizerWorker=null,proposal=null,optimizationContext=null;
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const r=()=>project.rooms[selected],m=()=>r().materials[zone];
 function validate(p){
@@ -12,7 +13,7 @@ function validate(p){
  for(const q of p.rooms){
   if(typeof q.name!=='string'||q.name.length>40||!num(q.w,500,15000)||!num(q.h,500,15000)||!['none','horizontal','vertical'].includes(q.split)||!num(q.at,200,15000)||!Array.isArray(q.materials)||q.materials.length!==2)throw Error('Invalid room geometry.');
   if(q.split!=='none'&&q.at>(q.split==='vertical'?q.w:q.h)-200)throw Error('Each divided area must be at least 200 mm wide.');
-  for(const a of q.materials){for(const [key,min,max]of[['w',50,3000],['h',50,3000],['joint',0,20],['angle',0,180],['ox',-3000,3000],['oy',-3000,3000],['reserve',0,50],['box',1,200],['price',0,100000]])if(!num(a[key],min,max))throw Error('Invalid material value: '+key+'.');
+  for(const a of q.materials){for(const [key,min,max]of[['w',50,3000],['h',50,3000],['joint',0,20],['angle',0,180],['ox',-10000,10000],['oy',-10000,10000],['reserve',0,50],['box',1,200],['price',0,100000]])if(!num(a[key],min,max))throw Error('Invalid material value: '+key+'.');
    if(!Number.isInteger(a.box)||!['straight','staggered'].includes(a.pattern)||!['square','large','small','wood','custom'].includes(a.preset))throw Error('Invalid material configuration.');
   }
   regions(q).forEach((rect,i)=>layout(rect,q.materials[i]));
@@ -72,11 +73,84 @@ document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLower
 $('grid').onclick=()=>{showGrid=!showGrid;$('grid').setAttribute('aria-pressed',showGrid);draw();};$('cuts').onclick=()=>{showCuts=!showCuts;$('cuts').setAttribute('aria-pressed',showCuts);draw();};$('fit').onclick=()=>{fitView();draw();};
 function zoom(factor,x=.5,y=.5){const newW=Math.max(baseWidth*.2,Math.min(baseWidth*4,view.w*factor)),ratio=newW/view.w;view.x+=view.w*x*(1-ratio);view.y+=view.h*y*(1-ratio);view.w*=ratio;view.h*=ratio;draw();}
 $('plus').onclick=()=>zoom(.8);$('minus').onclick=()=>zoom(1.25);
-$('drawing').addEventListener('wheel',e=>{e.preventDefault();const b=$('drawing').getBoundingClientRect();zoom(e.deltaY>0?1.1:1/1.1,(e.clientX-b.left)/b.width,(e.clientY-b.top)/b.height);},{passive:false});
-$('drawing').onpointerdown=e=>{if(e.button!==0)return;drag={x:e.clientX,y:e.clientY,vx:view.x,vy:view.y,moved:false,area:e.target.closest('[data-area]')?.dataset.area};$('drawing').setPointerCapture(e.pointerId);$('drawing').classList.add('dragging');};
-$('drawing').onpointermove=e=>{if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(Math.abs(dx)+Math.abs(dy)>4)drag.moved=true;view.x=drag.vx-dx*view.w/$('drawing').clientWidth;view.y=drag.vy-dy*view.h/$('drawing').clientHeight;draw();};
-$('drawing').onpointerup=()=>{if(drag&&!drag.moved&&drag.area!==undefined){zone=+drag.area;render();}drag=null;$('drawing').classList.remove('dragging');};
-$('drawing').onpointercancel=()=>{drag=null;$('drawing').classList.remove('dragging');};
+$('drawing').addEventListener('wheel',e=>{e.preventDefault();if(drag)return;const b=$('drawing').getBoundingClientRect();zoom(e.deltaY>0?1.1:1/1.1,(e.clientX-b.left)/b.width,(e.clientY-b.top)/b.height);},{passive:false});
+function setTool(next){tool=next;$('panTool').setAttribute('aria-pressed',next==='pan');$('moveTool').setAttribute('aria-pressed',next==='move');$('drawing').classList.toggle('move-layout',next==='move');$('toolHint').textContent=next==='move'?'Drag a pattern. The room stays fixed.':'Drag to move the view.';}
+$('panTool').onclick=()=>setTool('pan');$('moveTool').onclick=()=>setTool('move');
+function hitArea(e){
+ const b=$('drawing').getBoundingClientRect(),x=view.x+(e.clientX-b.left)*view.w/b.width,y=view.y+(e.clientY-b.top)*view.h/b.height;
+ return regions(r()).findIndex(a=>x>=a.x&&x<=a.x+a.w&&y>=a.y&&y<=a.y+a.h);
+}
+$('drawing').onpointerdown=e=>{
+ if(e.button!==0||drag)return;
+ const area=hitArea(e),moving=tool==='move'&&area>=0;
+ if(tool==='move'&&area<0){status('Drag inside an area to move its layout. Use Pan view to move the drawing.');return;}
+ if(moving){zone=area;render();}
+ drag={x:e.clientX,y:e.clientY,px:e.clientX,py:e.clientY,vx:view.x,vy:view.y,sx:view.w/$('drawing').clientWidth,sy:view.h/$('drawing').clientHeight,moved:false,area,moving,old:clone(project),ox:m().ox,oy:m().oy};
+ $('drawing').setPointerCapture(e.pointerId);$('drawing').classList.add('dragging');
+};
+function flushDrag(){
+ if(dragFrame!==null){cancelAnimationFrame(dragFrame);dragFrame=null;}
+ if(!drag)return;
+ const dx=drag.px-drag.x,dy=drag.py-drag.y;if(Math.abs(dx)+Math.abs(dy)>4)drag.moved=true;
+ if(!drag.moved)return;
+ if(!drag.moving){view.x=drag.vx-dx*drag.sx;view.y=drag.vy-dy*drag.sy;draw();return;}
+ const oldX=m().ox,oldY=m().oy;
+ m().ox=Math.max(-10000,Math.min(10000,Math.round(drag.ox+dx*drag.sx)));
+ m().oy=Math.max(-10000,Math.min(10000,Math.round(drag.oy+dy*drag.sy)));
+ try{results[zone]=layout(regions(r())[zone],m());$('ox').value=m().ox;$('oy').value=m().oy;draw();stats();status('Moving layout · release to save · Esc to cancel');}
+ catch(e){m().ox=oldX;m().oy=oldY;status(e.message);}
+}
+$('drawing').onpointermove=e=>{if(!drag)return;drag.px=e.clientX;drag.py=e.clientY;if(dragFrame===null)dragFrame=requestAnimationFrame(()=>{dragFrame=null;flushDrag();});};
+function finishDrag(cancel=false){
+ if(!drag)return;
+ if(!cancel)flushDrag();else if(dragFrame!==null){cancelAnimationFrame(dragFrame);dragFrame=null;}
+ const d=drag;drag=null;$('drawing').classList.remove('dragging');
+ if(cancel){if(d.moving)project=d.old;else{view.x=d.vx;view.y=d.vy;}render();status('Drag cancelled.');return;}
+ if(d.moving&&d.moved&&(m().ox!==d.ox||m().oy!==d.oy)){history.push(d.old);if(history.length>50)history.shift();future=[];persist();render();}
+ else if(!d.moved&&d.area>=0){zone=d.area;render();}
+}
+$('drawing').onpointerup=e=>{if(drag){drag.px=e.clientX;drag.py=e.clientY;}finishDrag();};
+$('drawing').onpointercancel=()=>finishDrag(true);
+$('drawing').onlostpointercapture=()=>{if(drag)finishDrag(true);};
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&drag){e.preventDefault();finishDrag(true);}});
+function stopSearch(){if(optimizerWorker){optimizerWorker.terminate();optimizerWorker=null;}$('searchProgress').classList.remove('busy');$('runOptimizer').disabled=false;}
+function closeOptimization(){stopSearch();proposal=null;optimizationContext=null;$('optimizerDialog').close();}
+$('optimize').onclick=()=>{
+ finishDrag();optimizationContext={project:JSON.stringify(project),room:selected,zone,rect:regions(r())[zone],material:clone(m())};proposal=null;
+ $('comparison').hidden=true;$('applyOptimizer').hidden=true;$('runOptimizer').hidden=false;$('runOptimizer').disabled=false;$('searchProgress').textContent='Ready to compare layout origins.';
+ $('optimizerDialog').showModal();
+};
+$('closeOptimizer').onclick=$('cancelOptimizer').onclick=closeOptimization;
+$('optimizerDialog').addEventListener('cancel',e=>{e.preventDefault();closeOptimization();});
+$('allowRotation').onchange=()=>{stopSearch();proposal=null;$('comparison').hidden=true;$('applyOptimizer').hidden=true;$('runOptimizer').hidden=false;$('searchProgress').textContent='Search options changed. Run again to compare.';};
+function miniPlan(rect,mat){
+ const a=layout(rect,mat),points=p=>p.map(v=>v.join(',')).join(' '),pad=Math.max(rect.w,rect.h)*.03;
+ return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${rect.x-pad} ${rect.y-pad} ${rect.w+pad*2} ${rect.h+pad*2}" role="img" aria-label="Layout comparison"><rect x="${rect.x}" y="${rect.y}" width="${rect.w}" height="${rect.h}" fill="white"/>${a.pieces.map(p=>`<polygon points="${points(p.polygon)}" fill="${p.cut?'#e5e5e5':'white'}" stroke="black" stroke-width=".6" vector-effect="non-scaling-stroke"/>`).join('')}<rect x="${rect.x}" y="${rect.y}" width="${rect.w}" height="${rect.h}" fill="none" stroke="black" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>`;
+}
+function showComparison(data){
+ proposal=data;const a=data.initial,b=data.best.stats,ctx=optimizationContext,rows=[['Source pieces',a.count,b.count],['Pieces requiring cuts',a.cut,b.cut],['Cutting offcuts',a.offcut.toFixed(3)+' m²',b.offcut.toFixed(3)+' m²'],['Boxes with reserve',a.boxes,b.boxes],['Rotation',ctx.material.angle+'°',data.best.material.angle+'°']];
+ const saved=a.count-b.count;
+ $('comparison').innerHTML=`<div class="comparison-plans"><div class="comparison-plan"><strong>CURRENT</strong>${miniPlan(ctx.rect,ctx.material)}</div><div class="comparison-plan"><strong>BEST FOUND</strong>${miniPlan(ctx.rect,data.best.material)}</div></div><table class="comparison-table"><thead><tr><th>Selected area</th><th>Current</th><th>Best found</th></tr></thead><tbody>${rows.map(row=>`<tr><td>${row[0]}</td><td>${row[1]}</td><td>${row[2]}</td></tr>`).join('')}</tbody></table><p class="result-note">${saved>0?`${saved} fewer source piece${saved===1?'':'s'} (${(saved/a.count*100).toFixed(1)}% reduction).`:data.improved?'Same source-piece count; improved cuts or offcuts.':'No better layout found in this search. Your current layout is retained.'} ${a.boxes===b.boxes?'The rounded box quantity is unchanged.':''}</p><p class="hint">${data.tested} candidates evaluated. One new piece per cut; no offcut reuse. Best found among sampled origins and enabled angles, not a guaranteed global minimum.</p>`;
+ $('comparison').hidden=false;$('applyOptimizer').hidden=!data.improved;$('runOptimizer').hidden=true;
+ $('searchProgress').textContent=data.improved?'A better fit is ready to review.':'Search complete.';
+}
+$('runOptimizer').onclick=()=>{
+ stopSearch();proposal=null;$('comparison').hidden=true;$('applyOptimizer').hidden=true;$('runOptimizer').disabled=true;$('searchProgress').classList.add('busy');$('searchProgress').textContent='Searching layout origins…';
+ try{
+  optimizerWorker=new Worker(new URL('./optimizer-worker.js',import.meta.url),{type:'module'});
+  optimizerWorker.onmessage=({data})=>{
+   if(data.type==='progress'){$('searchProgress').textContent=`${data.phase} · ${data.tested} candidates`;return;}
+   stopSearch();if(data.type==='error'){$('searchProgress').textContent='Search failed: '+data.message;return;}showComparison(data);
+  };
+  optimizerWorker.onerror=()=>{stopSearch();$('searchProgress').textContent='Could not run optimization. Serve all project files over HTTP and try again.';};
+  optimizerWorker.postMessage({...optimizationContext,allowRotation:$('allowRotation').checked});
+ }catch(e){stopSearch();$('searchProgress').textContent='Could not start search: '+e.message;}
+};
+$('applyOptimizer').onclick=()=>{
+ if(!proposal||!optimizationContext)return;
+ if(JSON.stringify(project)!==optimizationContext.project||selected!==optimizationContext.room||zone!==optimizationContext.zone){closeOptimization();status('Project changed. Please run optimization again.');return;}
+ const candidate=clone(proposal.best.material);closeOptimization();change(()=>r().materials[zone]=candidate);status('Best found applied · Undo restores the previous layout.');
+};
 function download(name,type,data){const u=URL.createObjectURL(new Blob([data],{type})),a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);}
 $('save').onclick=()=>{download('floorplan-lab-project.json','application/json',JSON.stringify(project,null,2));status('Project exported as JSON.');};
 $('open').onclick=()=>$('file').click();$('file').onchange=async()=>{const file=$('file').files[0];if(!file)return;try{if(file.size>2e6)throw Error('Project file must be under 2 MB.');const incoming=validate(JSON.parse(await file.text()));change(()=>{project=clone(incoming);selected=0;zone=0;},true);status('Project opened.');}catch(e){status('Could not open: '+e.message);}finally{$('file').value='';}};

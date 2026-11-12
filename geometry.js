@@ -12,7 +12,7 @@ export function clipRect(poly, r){
     }poly=out;
   }return poly;
 }
-export function layout(rect, m){
+export function layout(rect, m, {collect=true}={}){
   const rad=m.angle*Math.PI/180,c=Math.cos(rad),s=Math.sin(rad);
   const tx=rect.x+m.ox,ty=rect.y+m.oy;
   const rot=([x,y])=>[x*c-y*s+tx,x*s+y*c+ty];
@@ -31,7 +31,7 @@ export function layout(rect, m){
     const original=[[x,y],[x+m.w,y],[x+m.w,y+m.h],[x,y+m.h]].map(rot);
     const polygon=clipRect(original,rect),a=area(polygon);if(a<0.01)continue;
     const isCut=Math.abs(a-m.w*m.h)>0.1;
-    if(isCut)cut++;else full++;covered+=a;pieces.push({polygon,cut:isCut});
+    if(isCut)cut++;else full++;covered+=a;if(collect)pieces.push({polygon,cut:isCut});
   }
   const count=full+cut,recommended=Math.ceil(count*(1+m.reserve/100)-1e-9),boxes=Math.ceil(recommended/m.box);
   return {pieces,full,cut,count,covered,offcut:Math.max(0,count*m.w*m.h-covered)/1e6,area:rect.w*rect.h/1e6,recommended,boxes,buy:boxes*m.box,cost:boxes*m.price};

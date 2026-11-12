@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "rooms": [
+    {
+      "name": "Optimization demo",
+      "w": 1200,
+      "h": 1200,
+      "split": "none",
+      "at": 600,
+      "materials": [
+        {
+          "preset": "square",
+          "w": 600,
+          "h": 600,
+          "joint": 0,
+          "angle": 0,
+          "ox": 100,
+          "oy": 100,
+          "pattern": "straight",
+          "reserve": 10,
+          "box": 4,
+          "price": 100
+        },
+        {
+          "preset": "square",
+          "w": 600,
+          "h": 600,
+          "joint": 0,
+          "angle": 0,
+          "ox": 100,
+          "oy": 100,
+          "pattern": "straight",
+          "reserve": 10,
+          "box": 4,
+          "price": 100
+        }
+      ]
+    }
+  ]
+}
