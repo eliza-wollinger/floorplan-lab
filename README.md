@@ -1,107 +1,170 @@
 # floorplan-lab
 
-A monochrome, browser-based workspace for exploring tile and wood flooring layouts and estimating materials. Built with native JavaScript modules, SVG and CSS; no runtime dependencies or backend.
+**A browser-based workspace for exploring tile and wood flooring layouts, and estimating how much material you actually need.**
 
-**Version 0.2 — functional prototype.** Rooms are currently rectangular, displayed one at a time. This is the first working slice of a broader floor planning application, not a complete CAD system.
+Draw a room, pick a tile or plank, drag the pattern around, and watch the piece count, cuts and offcuts update live. When you're ready, let the optimizer search for the layout that wastes the least material.
 
-## What works
+Built with native JavaScript modules, SVG and CSS. No framework, no build step, no backend, no runtime dependencies.
 
+![floorplan-lab v0.2 demo](assets/gifs/floorplan-lab-v0.2-demo.gif)
+
+> **Status: v0.2, functional prototype.** Rooms are rectangular and shown one at a time. This is the first working slice of a broader floor planning tool, not a full CAD system.
+
+---
+
+## Features
+
+**Rooms and materials**
 - Up to 20 named rectangular rooms, with dimensions in millimetres.
 - Optional horizontal or vertical split into two independently configured areas.
-- Square and rectangular tiles, large formats and rectangular wood planks.
-- Straight grid and half-offset running bond; rotation and X/Y origin offsets.
-- Geometric clipping at room and region boundaries; cut-piece hatching.
-- Room area, full/cut piece counts and cutting offcut area.
-- Per-area reserve, box quantity and cost in BRL.
-- Separate Pan view and Move layout tools: drag the pattern inside an area without moving the room.
-- Live quantity updates while dragging; each completed drag is one undo step.
-- Optimize layout: background origin search, optional angle comparison, visual before/after preview, Apply or Keep current.
-- Pan, zoom, optional grid, undo/redo (session only).
-- Browser-local autosave; JSON project export/import and SVG drawing export.
+- Square and rectangular tiles, large formats, and rectangular wood planks.
+- Straight grid and half-offset running bond patterns.
+- Adjustable rotation, joint width, and X/Y origin offsets.
+
+**Quantities**
+- Exact geometric clipping at room and area boundaries, with hatching on cut pieces.
+- Room area, full vs. cut piece counts, and cutting offcut area.
+- Per-area reserve percentage, pieces per box, box count, and cost (BRL).
+
+**Interaction**
+- **Pan view** and **Move layout** tools: drag the pattern inside an area without moving the room.
+- Live quantity updates while dragging; each completed drag is a single undo step.
+- Zoom, optional grid, undo/redo.
+
+**Layout optimizer**
+- Background search for the best pattern origin, with optional angle comparison (0°, 45°, 90°).
+- Visual before/after preview, then **Apply** or **Keep current**.
+- Runs in a Web Worker, so the UI stays responsive.
+
+**Persistence**
+- Browser-local autosave.
+- JSON project export/import and SVG drawing export.
 - Responsive stacked layout for smaller screens.
 
-## GitHub Pages
+## Quick start
 
-1. Upload the **contents** of this folder to your `floorplan-lab` repository. `index.html` must be at the repository root.
-2. In the repository, open **Settings → Pages**.
-3. Choose **Deploy from a branch**, then **main** and **/ (root)**, and save.
-4. Open the URL GitHub provides after deployment.
-
-All asset references are relative, so project subpaths work. No build step, secrets or API keys are required. `.nojekyll` is included. Do not upload the ZIP itself as the website; extract it first.
-
-## Local development
-
-Use Node.js 20+:
+Requires **Node.js 20+** only for the dev server. There is nothing to install.
 
 ```sh
+git clone https://github.com/eliza-wollinger/floorplan-lab.git
+cd floorplan-lab
 npm run dev
 ```
 
-Open `http://127.0.0.1:3000`. No `npm install` is needed. Alternatively, serve this folder with VS Code Live Server. ES modules require HTTP; do not open `index.html` directly using `file://`.
+Then open <http://127.0.0.1:3000>.
 
-Run geometry checks:
+> ES modules require HTTP, so opening `index.html` directly via `file://` will not work. You can also serve the folder with any static server (for example, VS Code Live Server).
+
+Run the test suite:
 
 ```sh
 npm test
 ```
 
-## Geometry and quantity assumptions
+Try a sample project via **Open project**:
 
-Model values are in millimetres. SVG viewBox coordinates provide pan/zoom without mutating dimensions. Each rectangular piece is transformed into world coordinates and clipped to its rectangular area with Sutherland–Hodgman clipping. Polygon areas distinguish full pieces from cuts.
+| File | What it shows |
+| --- | --- |
+| `examples/bathroom.json` | A bathroom split into two areas with different materials |
+| `examples/optimization-demo.json` | An offset grid that the optimizer improves from 9 source pieces down to 4 |
 
-- **Floor area:** full rectangular surface, including joints.
-- **Full pieces:** source rectangles entirely inside the region, within a small numerical tolerance.
-- **Cut pieces:** intersecting source rectangles requiring trimming.
-- **Cutting offcuts:** source area minus retained piece area. This excludes the joint area and the additional purchase reserve.
-- **Recommended pieces:** `ceil((full + cut) × (1 + reserve / 100))`.
-- **Boxes:** `ceil(recommended / pieces per box)`.
-- **Cost:** box count × user-entered box price.
+## How it works
 
-One fresh source piece is assumed for each cut. Offcut reuse, saw kerf, breakage modelling and manufacturer installation constraints are not simulated. Reserve is a user choice, not an installation recommendation. No perimeter movement gap is modelled yet. Counts are conceptual purchase estimates; verify dimensions and installation requirements before ordering.
+### Geometry
 
-The bottom summary describes the **current room**. Purchase estimates describe the **selected area** only. Products are not pooled across rooms or regions yet; there is no project-wide purchasing total.
+All model values are in millimetres; SVG `viewBox` coordinates handle pan and zoom without ever changing dimensions. Each tile is transformed into world coordinates and clipped against its rectangular area using **Sutherland–Hodgman** clipping. Polygon areas then separate full pieces from cuts.
 
-## Layout optimization (v0.2)
+### Quantity assumptions
 
-Choose **Move layout** and drag inside the desired area. The area is selected automatically, and its origin changes while the room boundary stays fixed. Release to save. Escape cancels an in-progress drag. **Pan view** moves only the drawing viewport. Numeric X/Y origin controls remain available.
+| Quantity | Definition |
+| --- | --- |
+| **Floor area** | Full rectangular surface, including joints |
+| **Full pieces** | Source rectangles entirely inside the area (within numerical tolerance) |
+| **Cut pieces** | Source rectangles that intersect the boundary and need trimming |
+| **Cutting offcuts** | Source area minus retained piece area (excludes joints and purchase reserve) |
+| **Recommended pieces** | `ceil((full + cut) × (1 + reserve / 100))` |
+| **Boxes** | `ceil(recommended / pieces per box)` |
+| **Cost** | Box count × box price |
 
-Choose **Optimize layout → Find best fit** for the selected area. By default its angle is locked. The optional checkbox also tests 0°, 45° and 90°, in addition to the current angle. Review current/best drawings and quantities, then apply or keep the original. Apply is one undo step. Closing the dialog cancels a running worker.
+**Limitations to be aware of:**
+- One fresh source piece is assumed per cut. Offcut reuse, saw kerf, breakage, and manufacturer installation constraints are not simulated.
+- Reserve is a user choice, not an installation recommendation.
+- No perimeter movement gap is modelled yet.
+- The bottom summary describes the **current room**; purchase estimates describe the **selected area** only. Materials are not pooled across rooms or areas, so there is no project-wide total yet.
 
-The deterministic heuristic samples an 8 × 8 origin grid for each angle, then performs three 5 × 5 refinements around the best sampled origin for that angle. Running bond uses a two-row period. Duplicate candidates are skipped. Rotation is accounted for when converting local tile-grid offsets to world coordinates. Candidate workload limits match the geometry engine.
+Treat results as conceptual purchase estimates, and verify dimensions and installation requirements before ordering.
 
-The objective is lexicographic: minimize source-piece count, then cut-piece count, then cutting offcut area. The original layout is always a candidate; proposals cannot worsen this objective. This is **best found**, not a proof of global optimality. It does not optimize reuse, kerf, a minimum strip width, installation constraints, or several areas together. Identical box counts can remain even when fewer source pieces are needed.
+### Layout optimizer
 
-The search runs in a module Web Worker to avoid blocking pointer/UI input. Include `optimizer.js` and `optimizer-worker.js` when publishing. No external libraries or API services are used.
+Select an area, then choose **Optimize layout → Find best fit**. By default the angle is locked; an optional checkbox also tests 0°, 45° and 90°.
 
-Existing v0.1 JSON projects and browser autosaves remain compatible (project schema version 1). Undo history is session-only. The v0.2 offset range is ±10,000 mm; projects using larger offsets than ±3,000 mm may not open in v0.1.
+The search is a deterministic heuristic:
 
-## Structure
+1. Sample an 8 × 8 grid of pattern origins for each angle.
+2. Run three successive 5 × 5 refinements around the best sampled origin.
+3. Rank candidates **lexicographically**: fewest source pieces, then fewest cuts, then smallest cutting offcut area.
 
-- `index.html`: editor controls and semantic UI.
-- `style.css`: monochrome responsive layout.
-- `app.js`: state, interaction, history, persistence and SVG rendering.
-- `geometry.js`: independent clipping, layout and quantity calculations.
-- `optimizer.js`: pure candidate search and ranking.
-- `optimizer-worker.js`: background search/progress messaging.
-- `tests/optimizer.test.mjs`: improvements, unchanged optimum, fixed angle, rotation, reproducible metrics and ranking.
-- `tests/geometry.test.mjs`: exact grids, partial cuts, rotations, staggered layouts, joints, region partition, limits and reserve rounding.
-- `server.mjs`: dependency-free development HTTP server.
-- `examples/bathroom.json`: two-area sample, opened through **Open project**.
-- `examples/optimization-demo.json`: offset grid that improves from nine source pieces to four.
+The original layout is always a candidate, so a proposal can never be worse than what you started with. The result is **best found**, not a proof of global optimality. It does not account for offcut reuse, kerf, minimum strip width, installation rules, or multiple areas together.
 
-All files remain local to the browser unless explicitly exported. Clearing browser storage removes autosaved work. Export JSON for a durable backup. Imported JSON is validated and limited to 2 MB; excessive tile counts are rejected to protect the UI.
+## Project structure
 
-## Planned, not implemented
+```
+floorplan-lab/
+├── index.html              Editor controls and semantic UI
+├── style.css               Monochrome, responsive layout
+├── app.js                  State, interaction, history, persistence, SVG rendering
+├── geometry.js             Clipping, layout, and quantity calculations
+├── optimizer.js            Candidate search and ranking
+├── optimizer-worker.js     Background search and progress messaging
+├── server.mjs              Dependency-free dev server
+├── examples/               Sample projects
+├── assets/gifs/            Demo recordings
+└── tests/
+    ├── geometry.test.mjs   Grids, cuts, rotations, running bond, joints, limits, reserve rounding
+    └── optimizer.test.mjs  Improvements, unchanged optimum, fixed angle, rotation, ranking
+```
 
-- Freeform polygons, holes, pillars and interactive vertex editing.
-- Placing all rooms on a shared apartment drawing.
-- Image import with scale calibration and DXF import.
-- Native DWG import (requires a separate compatibility/licensing decision).
-- Hexagonal tiles, herringbone, chevron and modular patterns.
-- More than two regions per room, material catalog and project-wide product grouping.
-- Perimeter gaps, thresholds, skirting, cut optimisation and offcut reuse.
-- Scenario comparisons and PDF quantity reports.
+## Data and privacy
 
-## Verification
+Everything stays in your browser unless you explicitly export it. Clearing browser storage removes autosaved work, so export JSON for a durable backup. Imported JSON is validated and capped at 2 MB, and projects with excessive tile counts are rejected to protect the UI.
 
-Fourteen automated geometry/optimization tests pass. v0.2 desktop browser checks cover direct pattern dragging, one-step undo/redo, fixed-angle and optional-angle search, comparison previews, applying a suggestion, undoing it, and keeping the current layout. v0.1 browser checks covered independent materials, persistence and JSON/SVG downloads; these were not all repeated in v0.2. Mobile CSS is included but has not been tested on a physical mobile device. This release has not been deployed to the user's GitHub repository.
+Project files use schema version 1. Projects from v0.1 remain compatible, though v0.2 allows offsets up to ±10,000 mm, and projects using more than ±3,000 mm may not open in v0.1.
+
+## Deploying to GitHub Pages
+
+1. Make sure `index.html` is at the repository root.
+2. Go to **Settings → Pages**.
+3. Under **Build and deployment**, choose **Deploy from a branch**, then select **main** and **/ (root)**.
+4. Save and open the URL GitHub provides.
+
+All asset paths are relative, so project subpaths work. No build step, secrets, or API keys are needed, and `.nojekyll` is already included.
+
+## Testing
+
+```sh
+npm test
+```
+
+Runs 14 automated tests with the built-in Node test runner, covering geometry and the optimizer. Interaction features (dragging, undo/redo, optimizer preview, persistence, exports) have been checked manually in desktop browsers. Mobile styles are included but have not yet been tested on physical devices.
+
+## Roadmap
+
+Not implemented yet:
+
+- [ ] Freeform polygons, holes, pillars, and vertex editing
+- [ ] All rooms on a shared apartment drawing
+- [ ] Image import with scale calibration, and DXF import
+- [ ] Hexagonal tiles, herringbone, chevron, and modular patterns
+- [ ] More than two areas per room, material catalog, project-wide totals
+- [ ] Perimeter gaps, thresholds, skirting, cut optimization, offcut reuse
+- [ ] Scenario comparison and PDF quantity reports
+
+Native DWG import is also under consideration, but needs a separate compatibility and licensing decision.
+
+## Contributing
+
+Issues and pull requests are welcome. Please run `npm test` before opening a PR.
+
+## License
+
+No license has been specified yet.
