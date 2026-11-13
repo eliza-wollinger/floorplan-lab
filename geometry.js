@@ -12,29 +12,61 @@ export function clipRect(poly, r){
     }poly=out;
   }return poly;
 }
-export function layout(rect, m, {collect=true}={}){
-  const rad=m.angle*Math.PI/180,c=Math.cos(rad),s=Math.sin(rad);
-  const tx=rect.x+m.ox,ty=rect.y+m.oy;
-  const rot=([x,y])=>[x*c-y*s+tx,x*s+y*c+ty];
-  const inv=([x,y])=>[(x-tx)*c+(y-ty)*s,-(x-tx)*s+(y-ty)*c];
-  const corners=[[rect.x,rect.y],[rect.x+rect.w,rect.y],[rect.x+rect.w,rect.y+rect.h],[rect.x,rect.y+rect.h]].map(inv);
-  const px=m.w+m.joint,py=m.h+m.joint;
-  if(px<=0||py<=0)throw Error('Invalid tile dimensions.');
-  const xs=corners.map(p=>p[0]),ys=corners.map(p=>p[1]);
-  const x0=Math.floor(Math.min(...xs)/px)-1,x1=Math.ceil(Math.max(...xs)/px)+1;
-  const y0=Math.floor(Math.min(...ys)/py)-1,y1=Math.ceil(Math.max(...ys)/py)+1;
-  if((x1-x0+1)*(y1-y0+1)>18000)throw Error('Too many pieces for this preview. Increase tile size or reduce the room.');
-  let full=0,cut=0,covered=0;const pieces=[];
-  for(let j=y0;j<=y1;j++)for(let i=x0;i<=x1;i++){
-    const shift=m.pattern==='staggered'&&Math.abs(j%2)===1?px/2:0;
-    const x=i*px+shift,y=j*py;
-    const original=[[x,y],[x+m.w,y],[x+m.w,y+m.h],[x,y+m.h]].map(rot);
-    const polygon=clipRect(original,rect),a=area(polygon);if(a<0.01)continue;
-    const isCut=Math.abs(a-m.w*m.h)>0.1;
-    if(isCut)cut++;else full++;covered+=a;if(collect)pieces.push({polygon,cut:isCut});
+const rectangle=(x,y,w,h)=>[[x,y],[x+w,y],[x+w,y+h],[x,y+h]];
+export function compatibleLength(m){return (m.bands??3)*m.w+((m.bands??3)-1)*m.joint;}
+export function patternDefinition(m){
+ const g=m.joint,px=m.w+g,py=m.h+g,pattern=m.pattern;
+ if(!Number.isFinite(px)||!Number.isFinite(py)||m.w<=0||m.h<=0||g<0)throw Error('Invalid tile dimensions.');
+ if(pattern==='hexagon'){
+  const d=m.w,R=(d+g)/Math.sqrt(3),r=d/Math.sqrt(3);
+  return {basis:[[1.5*R,(d+g)/2],[0,d+g]],templates:[Array.from({length:6},(_,k)=>[r*Math.cos(k*Math.PI/3),r*Math.sin(k*Math.PI/3)])],sourceArea:Math.sqrt(3)/2*d*d};
+ }
+ if(pattern==='herringbone'){
+  if(m.h<=m.w)throw Error('Herringbone needs a length greater than the width.');
+  const L=py,W=px;
+  return {basis:[[L,L],[W,-W]],templates:[rectangle(g/2,g/2,m.h,m.w),rectangle(L+g/2,g/2,m.w,m.h)],sourceArea:m.w*m.h};
+ }
+ if(pattern==='basket'){
+  const n=m.bands??3,L=compatibleLength(m);
+  if(!Number.isInteger(n)||n<2||n>8)throw Error('Choose 2–8 planks per block.');
+  if(Math.abs(m.h-L)>.01)throw Error(`For ${n} planks and this joint, length must be ${L.toFixed(2)} mm.`);
+  const B=n*px,templates=[];
+  for(let k=0;k<n;k++){
+   templates.push(rectangle(g/2,k*px+g/2,m.h,m.w));
+   templates.push(rectangle(B+k*px+g/2,g/2,m.w,m.h));
   }
-  const count=full+cut,recommended=Math.ceil(count*(1+m.reserve/100)-1e-9),boxes=Math.ceil(recommended/m.box);
-  return {pieces,full,cut,count,covered,offcut:Math.max(0,count*m.w*m.h-covered)/1e6,area:rect.w*rect.h/1e6,recommended,boxes,buy:boxes*m.box,cost:boxes*m.price};
+  return {basis:[[B,B],[B,-B]],templates,sourceArea:m.w*m.h};
+ }
+ if(!['straight','staggered'].includes(pattern))throw Error('Unknown layout pattern.');
+ const offset=pattern==='staggered'?(m.offset??50)/100:0;
+ if(!Number.isFinite(offset)||offset<0||offset>1)throw Error('Offset must be between 0 and 100%.');
+ return {basis:[[px,0],[offset*px,py]],templates:[rectangle(0,0,m.w,m.h)],sourceArea:m.w*m.h};
+}
+export function layout(rect, m, {collect=true}={}){
+ const def=patternDefinition(m),[u,v]=def.basis,det=u[0]*v[1]-u[1]*v[0];
+ const rad=m.angle*Math.PI/180,c=Math.cos(rad),s=Math.sin(rad),tx=rect.x+m.ox,ty=rect.y+m.oy;
+ const rot=([x,y])=>[x*c-y*s+tx,x*s+y*c+ty];
+ const inv=([x,y])=>[(x-tx)*c+(y-ty)*s,-(x-tx)*s+(y-ty)*c];
+ const lattice=([x,y])=>[(x*v[1]-y*v[0])/det,(u[0]*y-u[1]*x)/det];
+ const corners=rectangle(rect.x,rect.y,rect.w,rect.h).map(inv),points=def.templates.flat();
+ const xs=corners.map(p=>p[0]),ys=corners.map(p=>p[1]),ax=points.map(p=>p[0]),ay=points.map(p=>p[1]);
+ const minX=Math.min(...xs)-Math.max(...ax),maxX=Math.max(...xs)-Math.min(...ax),minY=Math.min(...ys)-Math.max(...ay),maxY=Math.max(...ys)-Math.min(...ay);
+ const bounds=rectangle(minX,minY,maxX-minX,maxY-minY).map(lattice),is=bounds.map(p=>p[0]),js=bounds.map(p=>p[1]);
+ const i0=Math.floor(Math.min(...is))-1,i1=Math.ceil(Math.max(...is))+1,j0=Math.floor(Math.min(...js))-1,j1=Math.ceil(Math.max(...js))+1;
+ if((i1-i0+1)*(j1-j0+1)*def.templates.length>18000)throw Error('Too many pieces for this preview. Increase tile size or reduce the room.');
+ let full=0,cut=0,covered=0;const pieces=[];
+ for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){
+  const dx=i*u[0]+j*v[0],dy=i*u[1]+j*v[1];
+  for(const template of def.templates){
+   const original=template.map(([x,y])=>rot([x+dx,y+dy])),polygon=clipRect(original,rect),a=area(polygon);
+   if(a<.01)continue;
+   const isCut=Math.abs(a-def.sourceArea)>.1;
+   if(isCut)cut++;else full++;covered+=a;
+   if(collect)pieces.push({polygon,cut:isCut});
+  }
+ }
+ const count=full+cut,recommended=Math.ceil(count*(1+m.reserve/100)-1e-9),boxes=Math.ceil(recommended/m.box);
+ return {pieces,full,cut,count,covered,sourceArea:def.sourceArea,offcut:Math.max(0,count*def.sourceArea-covered)/1e6,area:rect.w*rect.h/1e6,recommended,boxes,buy:boxes*m.box,cost:boxes*m.price};
 }
 export function regions(room){
   if(room.split==='none')return [{x:0,y:0,w:room.w,h:room.h}];

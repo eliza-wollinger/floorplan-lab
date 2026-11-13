@@ -1,0 +1,278 @@
+{
+  "version": 2,
+  "rooms": [
+    {
+      "name": "Aligned horizontal",
+      "w": 4000,
+      "h": 3000,
+      "split": "none",
+      "at": 2000,
+      "materials": [
+        {
+          "preset": "custom",
+          "w": 600,
+          "h": 300,
+          "joint": 3,
+          "angle": 0,
+          "ox": 0,
+          "oy": 0,
+          "pattern": "straight",
+          "offset": 50,
+          "bands": 3,
+          "reserve": 10,
+          "box": 4,
+          "price": 0
+        },
+        {
+          "preset": "custom",
+          "w": 600,
+          "h": 300,
+          "joint": 3,
+          "angle": 0,
+          "ox": 0,
+          "oy": 0,
+          "pattern": "straight",
+          "offset": 50,
+          "bands": 3,
+          "reserve": 10,
+          "box": 4,
+          "price": 0
+        }
+      ]
+    },
+    {
+      "name": "Aligned vertical",
+      "w": 4000,
+      "h": 3000,
+      "split": "none",
+      "at": 2000,
+      "materials": [
+        {
+          "preset": "custom",
+          "w": 600,
+          "h": 300,
+          "joint": 3,
+          "angle": 90,
+          "ox": 0,
+          "oy": 0,
+          "pattern": "straight",
+          "offset": 50,
+          "bands": 3,
+          "reserve": 10,
+          "box": 4,
+          "price": 0
+        },
+        {
+          "preset": "custom",
+          "w": 600,
+          "h": 300,
+          "joint": 3,
+          "angle": 0,
+          "ox": 0,
+          "oy": 0,
+          "pattern": "straight",
+          "offset": 50,
+          "bands": 3,
+          "reserve": 10,
+          "box": 4,
+          "price": 0
+        }
+      ]
+    },
+    {
+      "name": "Aligned diagonal",
+      "w": 4000,
+      "h": 3000,
+      "split": "none",
+      "at": 2000,
+      "materials": [
+        {
+          "preset": "custom",
+          "w": 600,
+          "h": 300,
+          "joint": 3,
+          "angle": 45,
+          "ox": 0,
+          "oy": 0,
+          "pattern": "straight",
+          "offset": 50,
+          "bands": 3,
+          "reserve": 10,
+          "box": 4,
+          "price": 0
+        },
+        {
+          "preset": "custom",
+          "w": 600,
+          "h": 300,
+          "joint": 3,
+          "angle": 0,
+          "ox": 0,
+          "oy": 0,
+          "pattern": "straight",
+          "offset": 50,
+          "bands": 3,
+          "reserve": 10,
+          "box": 4,
+          "price": 0
+        }
+      ]
+    },
+    {
+      "name": "Running bond",
+      "w": 4000,
+      "h": 3000,
+      "split": "none",
+      "at": 2000,
+      "materials": [
+        {
+          "preset": "custom",
+          "w": 600,
+          "h": 300,
+          "joint": 3,
+          "angle": 0,
+          "ox": 0,
+          "oy": 0,
+          "pattern": "staggered",
+          "offset": 50,
+          "bands": 3,
+          "reserve": 10,
+          "box": 4,
+          "price": 0
+        },
+        {
+          "preset": "custom",
+          "w": 600,
+          "h": 300,
+          "joint": 3,
+          "angle": 0,
+          "ox": 0,
+          "oy": 0,
+          "pattern": "straight",
+          "offset": 50,
+          "bands": 3,
+          "reserve": 10,
+          "box": 4,
+          "price": 0
+        }
+      ]
+    },
+    {
+      "name": "Herringbone",
+      "w": 4000,
+      "h": 3000,
+      "split": "none",
+      "at": 2000,
+      "materials": [
+        {
+          "preset": "custom",
+          "w": 200,
+          "h": 800,
+          "joint": 3,
+          "angle": 45,
+          "ox": 0,
+          "oy": 0,
+          "pattern": "herringbone",
+          "offset": 50,
+          "bands": 3,
+          "reserve": 10,
+          "box": 4,
+          "price": 0
+        },
+        {
+          "preset": "custom",
+          "w": 600,
+          "h": 300,
+          "joint": 3,
+          "angle": 0,
+          "ox": 0,
+          "oy": 0,
+          "pattern": "straight",
+          "offset": 50,
+          "bands": 3,
+          "reserve": 10,
+          "box": 4,
+          "price": 0
+        }
+      ]
+    },
+    {
+      "name": "Basket weave",
+      "w": 4000,
+      "h": 3000,
+      "split": "none",
+      "at": 2000,
+      "materials": [
+        {
+          "preset": "custom",
+          "w": 200,
+          "h": 606,
+          "joint": 3,
+          "angle": 0,
+          "ox": 0,
+          "oy": 0,
+          "pattern": "basket",
+          "offset": 50,
+          "bands": 3,
+          "reserve": 10,
+          "box": 4,
+          "price": 0
+        },
+        {
+          "preset": "custom",
+          "w": 600,
+          "h": 300,
+          "joint": 3,
+          "angle": 0,
+          "ox": 0,
+          "oy": 0,
+          "pattern": "straight",
+          "offset": 50,
+          "bands": 3,
+          "reserve": 10,
+          "box": 4,
+          "price": 0
+        }
+      ]
+    },
+    {
+      "name": "Regular hexagon",
+      "w": 4000,
+      "h": 3000,
+      "split": "none",
+      "at": 2000,
+      "materials": [
+        {
+          "preset": "custom",
+          "w": 300,
+          "h": 300,
+          "joint": 3,
+          "angle": 0,
+          "ox": 0,
+          "oy": 0,
+          "pattern": "hexagon",
+          "offset": 50,
+          "bands": 3,
+          "reserve": 10,
+          "box": 4,
+          "price": 0
+        },
+        {
+          "preset": "custom",
+          "w": 600,
+          "h": 300,
+          "joint": 3,
+          "angle": 0,
+          "ox": 0,
+          "oy": 0,
+          "pattern": "straight",
+          "offset": 50,
+          "bands": 3,
+          "reserve": 10,
+          "box": 4,
+          "price": 0
+        }
+      ]
+    }
+  ]
+}

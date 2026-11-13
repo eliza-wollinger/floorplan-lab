@@ -1,31 +1,89 @@
-import {layout,regions} from './geometry.js';
+import {layout,regions,compatibleLength} from './geometry.js';
+import {validateProject} from './project.js';
 const $=id=>document.getElementById(id),clone=v=>JSON.parse(JSON.stringify(v));
-const material=()=>({preset:'square',w:600,h:600,joint:3,angle:0,ox:0,oy:0,pattern:'straight',reserve:10,box:4,price:0});
+const material=()=>({preset:'square',w:600,h:600,joint:3,angle:0,ox:0,oy:0,pattern:'straight',offset:50,bands:3,reserve:10,box:4,price:0});
 const room=(name='Living room')=>({name,w:4800,h:3600,split:'none',at:2400,materials:[material(),material()]});
-let project={version:1,rooms:[room()]},selected=0,zone=0,history=[],future=[],results=[],showGrid=true,showCuts=true;
+let project={version:2,rooms:[room()]},selected=0,zone=0,history=[],future=[],results=[],showGrid=true,showCuts=true;
 let view={x:-1000,y:-1000,w:6800,h:5600},baseWidth=6800,drag=null,tool='pan',dragFrame=null;
 let optimizerWorker=null,proposal=null,optimizationContext=null;
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const r=()=>project.rooms[selected],m=()=>r().materials[zone];
-function validate(p){
- if(!p||p.version!==1||!Array.isArray(p.rooms)||!p.rooms.length||p.rooms.length>20)throw Error('Use a Floorplan Lab version 1 project with 1–20 rooms.');
- const num=(v,a,b)=>typeof v==='number'&&Number.isFinite(v)&&v>=a&&v<=b;
- for(const q of p.rooms){
-  if(typeof q.name!=='string'||q.name.length>40||!num(q.w,500,15000)||!num(q.h,500,15000)||!['none','horizontal','vertical'].includes(q.split)||!num(q.at,200,15000)||!Array.isArray(q.materials)||q.materials.length!==2)throw Error('Invalid room geometry.');
-  if(q.split!=='none'&&q.at>(q.split==='vertical'?q.w:q.h)-200)throw Error('Each divided area must be at least 200 mm wide.');
-  for(const a of q.materials){for(const [key,min,max]of[['w',50,3000],['h',50,3000],['joint',0,20],['angle',0,180],['ox',-10000,10000],['oy',-10000,10000],['reserve',0,50],['box',1,200],['price',0,100000]])if(!num(a[key],min,max))throw Error('Invalid material value: '+key+'.');
-   if(!Number.isInteger(a.box)||!['straight','staggered'].includes(a.pattern)||!['square','large','small','wood','custom'].includes(a.preset))throw Error('Invalid material configuration.');
-  }
-  regions(q).forEach((rect,i)=>layout(rect,q.materials[i]));
- }return p;
-}
+const validate=validateProject;
 function status(msg){$('status').textContent=msg;}
-function persist(){try{localStorage.setItem('floorplan-lab-v1',JSON.stringify(project));status('Saved locally · mm');}catch{status('Local save unavailable — export JSON to keep your work.');}}
-try{const saved=localStorage.getItem('floorplan-lab-v1');if(saved)project=validate(JSON.parse(saved));}catch{status('Starting a new project.');}
-function change(fn,fit=false){const previous=clone(project);try{fn();validate(project);history.push(previous);if(history.length>50)history.shift();future=[];persist();render(fit);}catch(e){project=previous;render();status(e.message);}}
+function persist(){try{localStorage.setItem('floorplan-lab-v3',JSON.stringify(project));status('Saved locally · mm');}catch{status('Local save unavailable — export JSON to keep your work.');}}
+try{const saved=localStorage.getItem('floorplan-lab-v3')||localStorage.getItem('floorplan-lab-v1');if(saved)project=validate(JSON.parse(saved));}catch{status('Starting a new project.');}
+function change(fn,fit=false){const previous=clone(project);try{fn();validate(project);history.push(previous);if(history.length>50)history.shift();future=[];persist();render(fit);return true;}catch(e){project=previous;render();status(e.message);return false;}}
+const patternNames={straight:'Aligned',staggered:'Running bond',herringbone:'Herringbone',basket:'Basket weave',hexagon:'Hexagon'};
+const galleryItems=[
+ {id:'horizontal',name:'Aligned horizontal',tag:'RECTANGULAR',pattern:'straight',angle:0,w:480,h:240,note:'Straight rows · 0°'},
+ {id:'vertical',name:'Aligned vertical',tag:'RECTANGULAR',pattern:'straight',angle:90,w:480,h:240,note:'Straight rows · 90°'},
+ {id:'diagonal',name:'Aligned diagonal',tag:'RECTANGULAR',pattern:'straight',angle:45,w:400,h:240,note:'Straight rows · 45°'},
+ {id:'staggered',name:'Running bond',tag:'OFFSET ROWS',pattern:'staggered',angle:0,w:480,h:240,note:'½, ⅓ or custom row offset'},
+ {id:'herringbone',name:'Herringbone',tag:'WOOD & TILE',pattern:'herringbone',angle:45,w:160,h:640,note:'Perpendicular rectangular pieces'},
+ {id:'basket',name:'Basket weave / parquet',tag:'ALTERNATING BLOCKS',pattern:'basket',angle:0,w:160,h:488,note:'2–8 planks per compatible block'},
+ {id:'hexagon',name:'Regular hexagon',tag:'GEOMETRIC',pattern:'hexagon',angle:0,w:300,h:300,note:'Size measured across parallel faces'}
+];
+function previewPattern(a){
+ const rect={x:0,y:0,w:1800,h:1100},pieces=layout(rect,a).pieces;
+ return `<svg viewBox="0 0 1800 1100" aria-hidden="true" focusable="false">${pieces.map(p=>`<polygon points="${p.polygon.map(v=>v.join(',')).join(' ')}" fill="white" stroke="currentColor" stroke-width=".7" vector-effect="non-scaling-stroke"/>`).join('')}</svg>`;
+}
+function openPatterns(){
+ $('patternCards').innerHTML=galleryItems.map(g=>{
+  const a={...material(),pattern:g.pattern,w:g.w,h:g.h,angle:g.angle,joint:4};
+  if(g.pattern==='basket')a.h=compatibleLength(a);
+  const active=m().pattern===g.pattern&&(g.pattern!=='straight'||m().angle===g.angle);
+  return `<button class="pattern-card" data-pattern="${g.id}" aria-pressed="${active}"><span class="pattern-tag">${g.tag}</span>${previewPattern(a)}<strong>${g.name}</strong><span class="pattern-note">${g.note}</span></button>`;
+ }).join('');$('patternLibrary').showModal();
+}
+function choosePattern(id){
+ const g=galleryItems.find(a=>a.id===id);const pattern=g?g.pattern:id;
+ const applied=change(()=>{
+  const a=m(),previous=a.pattern;a.pattern=pattern;
+  if(g)a.angle=g.angle;
+  if(pattern==='herringbone'){
+   if(a.h<a.w)[a.w,a.h]=[a.h,a.w];
+   if(a.h===a.w){a.w=200;a.h=800;}
+   a.preset='custom';
+  }
+  if(pattern==='basket'){
+   if(compatibleLength(a)>3000)a.w=200;
+   a.h=compatibleLength(a);a.preset='custom';
+  }
+  if(pattern==='hexagon'){
+   if(previous!=='hexagon'){a.w=300;a.h=300;a.price=0;}
+   a.preset='custom';
+  }
+ });
+ if(!applied)return;
+ if($('patternLibrary').open)$('patternLibrary').close();
+ status(pattern==='basket'?'Basket weave: length calculated to fit the block. Check your product dimensions.':pattern==='hexagon'?'Regular hexagon: size is measured across flats. Review box quantity and price.':'Pattern applied · drag or rotate to explore.');
+}
+function updatePatternControls(){
+ const a=m(),hex=a.pattern==='hexagon',basket=a.pattern==='basket';
+ $('patternLabel').textContent=patternNames[a.pattern];$('pattern').value=a.pattern;
+ $('widthTitle').textContent=hex?'Across flats':'Width';$('lengthField').hidden=hex;$('tileH').disabled=basket;
+ $('preset').disabled=hex||basket;
+ for(const option of $('preset').options)option.disabled=a.pattern==='herringbone'&&['square','small'].includes(option.value);
+ $('offsetControls').hidden=a.pattern!=='staggered';$('offset').value=Number((a.offset??50).toFixed(4));
+ $('halfOffset').setAttribute('aria-pressed',Math.abs(a.offset-50)<.0001);$('thirdOffset').setAttribute('aria-pressed',Math.abs(a.offset-100/3)<.0001);
+ $('basketControls').hidden=!basket;$('bands').value=a.bands;
+ $('shapeNote').textContent=hex?`Regular hexagon · ${a.w} mm across flats · ${(2*a.w/Math.sqrt(3)).toFixed(2)} mm corner to corner. Joint is the perpendicular gap between edges.`:basket?`${a.bands} planks per block. Compatible length = ${a.bands} × ${a.w} + ${a.bands-1} × ${a.joint} = ${a.h.toFixed(2)} mm. Length updates automatically; verify your product matches.`:a.pattern==='herringbone'?'Width is the short side; length must be greater. Rotation turns the entire herringbone pattern.':'Dimensions describe one piece. Rotation turns the whole layout.';
+ $('patternChip').innerHTML=patternIcon(a.pattern);
+}
+function patternIcon(pattern){
+ const g=galleryItems.find(x=>x.pattern===pattern),a={...material(),pattern,w:g.w,h:g.h,joint:4,angle:g.angle};
+ if(pattern==='basket')a.h=compatibleLength(a);return previewPattern(a);
+}
+$('choosePattern').onclick=openPatterns;$('closePatterns').onclick=()=>$('patternLibrary').close();
+$('patternCards').onclick=e=>{const el=e.target.closest('[data-pattern]');if(el)choosePattern(el.dataset.pattern);};
+$('offset').onchange=()=>change(()=>m().offset=+$('offset').value);
+$('halfOffset').onclick=()=>change(()=>m().offset=50);$('thirdOffset').onclick=()=>change(()=>m().offset=100/3);
+$('bands').onchange=()=>change(()=>{m().bands=+$('bands').value;m().h=compatibleLength(m());});
+
 function props(){
  const q=r(),a=m();$('roomName').value=q.name;$('roomW').value=q.w;$('roomH').value=q.h;$('split').value=q.split;$('splitAt').value=q.at;$('splitAt').max=(q.split==='vertical'?q.w:q.h)-200;$('splitLabel').hidden=q.split==='none';
  for(const [id,key]of Object.entries({tileW:'w',tileH:'h',joint:'joint',angle:'angle',ox:'ox',oy:'oy',reserve:'reserve',box:'box',price:'price',pattern:'pattern',preset:'preset'}))$(id).value=a[key];
+ updatePatternControls();
  $('delete').disabled=project.rooms.length===1;$('add').disabled=project.rooms.length>=20;$('undo').disabled=!history.length;$('redo').disabled=!future.length;
  $('drawingName').textContent=q.name;
  $('rooms').innerHTML=project.rooms.map((q,i)=>`<button class="room-row ${i===selected?'active':''}" data-room="${i}" aria-pressed="${i===selected}"><span>▱ &nbsp;${esc(q.name)}</span><small>${(q.w*q.h/1e6).toFixed(1)} m²</small></button>`).join('');
@@ -62,9 +120,9 @@ $('roomName').onchange=()=>change(()=>r().name=$('roomName').value.trim()||'Unti
 for(const [id,key]of [['roomW','w'],['roomH','h']])$(id).onchange=()=>change(()=>{r()[key]=+$(id).value;const max=(r().split==='vertical'?r().w:r().h)-200;r().at=Math.min(r().at,max);},true);
 $('split').onchange=()=>change(()=>{r().split=$('split').value;r().at=Math.round((r().split==='vertical'?r().w:r().h)/2);zone=0;});
 $('splitAt').onchange=()=>change(()=>r().at=+$('splitAt').value);
-for(const [id,key]of Object.entries({tileW:'w',tileH:'h',joint:'joint',angle:'angle',ox:'ox',oy:'oy',reserve:'reserve',box:'box',price:'price'}))$(id).onchange=()=>change(()=>{m()[key]=Number($(id).value);if(key==='w'||key==='h')m().preset='custom';});
-$('pattern').onchange=()=>change(()=>m().pattern=$('pattern').value);
-$('preset').onchange=()=>change(()=>{const val=$('preset').value;m().preset=val;const presets={square:[600,600,'straight'],large:[600,1200,'straight'],wood:[180,1200,'staggered'],small:[200,200,'straight']};if(presets[val]){[m().w,m().h,m().pattern]=presets[val];}});
+for(const [id,key]of Object.entries({tileW:'w',tileH:'h',joint:'joint',angle:'angle',ox:'ox',oy:'oy',reserve:'reserve',box:'box',price:'price'}))$(id).onchange=()=>change(()=>{m()[key]=Number($(id).value);if(key==='w'||key==='h')m().preset='custom';if(m().pattern==='basket'&&['w','joint'].includes(key))m().h=compatibleLength(m());if(m().pattern==='hexagon'&&key==='w')m().h=m().w;});
+$('pattern').onchange=()=>choosePattern($('pattern').value);
+$('preset').onchange=()=>change(()=>{const val=$('preset').value;m().preset=val;const presets={square:[600,600,'straight'],large:[600,1200,'straight'],wood:[180,1200,'staggered'],small:[200,200,'straight']};if(presets[val]){[m().w,m().h]=presets[val];}});
 $('add').onclick=()=>change(()=>{project.rooms.push(room('Room '+(project.rooms.length+1)));selected=project.rooms.length-1;zone=0;},true);
 $('delete').onclick=()=>{if(project.rooms.length>1)change(()=>{project.rooms.splice(selected,1);selected=Math.max(0,selected-1);zone=0;},true);};
 function undo(redo=false){const src=redo?future:history,dst=redo?history:future;if(!src.length)return;dst.push(clone(project));project=src.pop();selected=Math.min(selected,project.rooms.length-1);zone=0;persist();render(true);}
