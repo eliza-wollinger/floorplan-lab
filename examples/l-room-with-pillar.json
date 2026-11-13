@@ -1,0 +1,79 @@
+{
+  "version": 3,
+  "rooms": [
+    {
+      "name": "L-shaped studio",
+      "w": 4800,
+      "h": 3600,
+      "shape": "lshape",
+      "outline": [
+        [
+          0,
+          0
+        ],
+        [
+          2880,
+          0
+        ],
+        [
+          2880,
+          1440
+        ],
+        [
+          4800,
+          1440
+        ],
+        [
+          4800,
+          3600
+        ],
+        [
+          0,
+          3600
+        ]
+      ],
+      "holes": [
+        {
+          "x": 2000,
+          "y": 1800,
+          "w": 400,
+          "h": 400
+        }
+      ],
+      "split": "vertical",
+      "at": 2880,
+      "materials": [
+        {
+          "preset": "custom",
+          "w": 200,
+          "h": 800,
+          "joint": 3,
+          "angle": 45,
+          "ox": 0,
+          "oy": 0,
+          "pattern": "herringbone",
+          "offset": 50,
+          "bands": 3,
+          "reserve": 10,
+          "box": 8,
+          "price": 0
+        },
+        {
+          "preset": "custom",
+          "w": 300,
+          "h": 300,
+          "joint": 3,
+          "angle": 0,
+          "ox": 0,
+          "oy": 0,
+          "pattern": "hexagon",
+          "offset": 50,
+          "bands": 3,
+          "reserve": 10,
+          "box": 6,
+          "price": 0
+        }
+      ]
+    }
+  ]
+}
