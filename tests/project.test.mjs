@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {validateProject} from '../../../../../Downloads/floorplan-lab-v0.4/floorplan-lab-v0.4/project.js';
+import {layout,regions} from '../../../../../Downloads/floorplan-lab-v0.4/floorplan-lab-v0.4/geometry.js';
+const old=()=>JSON.parse(readFileSync(new URL('../examples/bathroom.json',import.meta.url)));
+test('legacy schema migrates without changing room dimensions or quantities',()=>{const p=old(),before=regions(p.rooms[0]).map((r,i)=>layout(r,p.rooms[0].materials[i]));const next=validateProject(p);assert.equal(next.version,3);assert.equal(next.rooms[0].w,2400);next.rooms[0].materials.forEach(m=>{assert.equal(m.offset,50);assert.equal(m.bands,3);});const after=regions(next.rooms[0]).map((r,i)=>layout(r,next.rooms[0].materials[i]));assert.deepEqual(after,before);});
+test('new pattern settings survive a JSON save/open roundtrip',()=>{const p=validateProject(old());p.rooms[0].materials[0].pattern='hexagon';const copy=validateProject(JSON.parse(JSON.stringify(p)));assert.deepEqual(copy,p);});
+test('invalid imported block dimensions fail with compatible measurement',()=>{const p=validateProject(old());p.rooms[0].materials[0].pattern='basket';assert.throws(()=>validateProject(p),/length must be/);});
+test('invalid offset and unknown future schemas are rejected',()=>{const p=validateProject(old());p.rooms[0].materials[0].offset=101;assert.throws(()=>validateProject(p),/pattern settings/);p.version=999;assert.throws(()=>validateProject(p),/project/);});
