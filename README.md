@@ -2,11 +2,13 @@
 
 A monochrome, browser-based workspace for exploring tile and wood flooring layouts and estimating materials. Built with native JavaScript modules, SVG and CSS; no runtime dependencies or backend.
 
-**Version 0.3 — functional prototype.** Rooms are currently rectangular, displayed one at a time. This is the first working slice of a broader floor planning application, not a complete CAD system.
+**Version 0.4 — functional prototype.** Simple polygon rooms and rectangular exclusions are supported, displayed one room at a time. This is the first working slice of a broader floor planning application, not a complete CAD system.
 
 ## What works
 
-- Up to 20 named rectangular rooms, with dimensions in millimetres.
+- Up to 20 named rooms: rectangle, L-shape or custom simple polygon, with dimensions in millimetres.
+- Edit vertices by dragging with optional 50 mm snap, or enter exact X/Y coordinates. Add/remove vertices (3–40).
+- Add up to 10 rectangular pillars/exclusions per room; their areas are removed from flooring quantities.
 - Optional horizontal or vertical split into two independently configured areas.
 - Square and rectangular tiles, wood planks and regular hexagons.
 - Visual pattern library: aligned horizontal/vertical/diagonal, running bond with ½, ⅓ or custom offset, herringbone, basket weave/parquet blocks, and regular hexagons. Rotation and X/Y origins work across all patterns.
@@ -47,9 +49,9 @@ npm test
 
 ## Geometry and quantity assumptions
 
-Model values are in millimetres. SVG viewBox coordinates provide pan/zoom without mutating dimensions. Each rectangular or hexagonal piece is transformed into world coordinates and clipped to its rectangular area with Sutherland–Hodgman clipping. Polygon areas distinguish full pieces from cuts.
+Model values are in millimetres. SVG viewBox coordinates provide pan/zoom without mutating dimensions. Each source piece is transformed into world coordinates. Simple room outlines are ear-clipped into triangles; rectangular holes are subtracted as disjoint convex cells. Cells are intersected with the selected region and then each tile. The retained fragment areas are summed **per source tile**, so triangulation seams never create extra tiles or false cuts. Sutherland–Hodgman is only applied against convex cells, never against a concave room directly. SVG clips original source outlines against an even-odd room mask, so internal triangulation edges are not displayed.
 
-- **Floor area:** full rectangular surface, including joints.
+- **Floor area:** net polygon area minus pillars, including joint area.
 - **Full pieces:** source pieces entirely inside the region, within a small numerical tolerance.
 - **Cut pieces:** intersecting source pieces requiring trimming.
 - **Cutting offcuts:** source area minus retained piece area. This excludes the joint area and the additional purchase reserve.
@@ -73,7 +75,7 @@ The objective is lexicographic: minimize source-piece count, then cut-piece coun
 
 The search runs in a module Web Worker to avoid blocking pointer/UI input. Include `optimizer.js` and `optimizer-worker.js` when publishing. No external libraries or API services are used.
 
-v0.1/v0.2 JSON files (schema 1) migrate to schema 2, adding row offset and block count. v0.3 saves under a new browser-storage key and reads the older key as a fallback, leaving the older autosave intact. New files are not backward-compatible with v0.2. Undo history is session-only. Export JSON before upgrading.
+v0.1/v0.2 JSON files (schema 1) and v0.3 files (schema 2) migrate to schema 3, adding rectangular outlines and empty exclusion lists while preserving materials. v0.4 saves under `floorplan-lab-v4` and reads v0.3/v0.1 keys as fallbacks, leaving the older autosaves intact. New files are not backward-compatible with earlier releases. Undo history is session-only. Export JSON before upgrading.
 
 ## Pattern dimensions
 
@@ -83,7 +85,7 @@ v0.1/v0.2 JSON files (schema 1) migrate to schema 2, adding row offset and block
 - **Basket weave/parquet:** 2–8 planks per square block, alternating orientation. Required physical length = n × width + (n − 1) × joint. The length field is derived and updates automatically. This does not mean an existing product can change size: select a product matching the computed dimensions. Imported incompatible blocks are rejected.
 - **Regular hexagon:** size means distance across parallel faces. Corner-to-corner size = 2 × across-flats / √3. Piece area = √3 / 2 × across-flats². Joint means perpendicular edge separation. Changing to this family starts at 300 mm across flats and clears the prior box price; check actual packaging.
 
-All patterns remain clipped to rectangular areas. Current/best comparisons optimize the selected layout family, not a choice between different products. No leftover-piece reuse is included.
+All patterns are clipped to the actual room outline, pillars and optional region boundary. Current/best comparisons optimize the selected layout family, not a choice between different products. No leftover-piece reuse is included.
 
 Open `examples/pattern-library.json` to explore all seven gallery options as named rooms.
 
@@ -95,6 +97,9 @@ Open `examples/pattern-library.json` to explore all seven gallery options as nam
 - `project.js`: project validation and legacy schema migration.
 - `tests/patterns.test.mjs` and `tests/project.test.mjs`: new pattern and compatibility checks.
 - `geometry.js`: independent clipping, layout and quantity calculations.
+- `room-geometry.js`: polygon validation, triangulation, rectangular hole subtraction and SVG boundary paths.
+- `tests/rooms.test.mjs`: concave rooms, disjoint cells, source identity, pillars, region partitions and optimization.
+- `examples/l-room-with-pillar.json`: editable concave room with two different materials.
 - `optimizer.js`: pure candidate search and ranking.
 - `optimizer-worker.js`: background search/progress messaging.
 - `tests/optimizer.test.mjs`: improvements, unchanged optimum, fixed angle, rotation, reproducible metrics and ranking.
@@ -107,7 +112,7 @@ All files remain local to the browser unless explicitly exported. Clearing brows
 
 ## Planned, not implemented
 
-- Freeform polygons, holes, pillars and interactive vertex editing.
+- Curved room boundaries and circular rooms; arbitrary polygon exclusions.
 - Placing all rooms on a shared apartment drawing.
 - Image import with scale calibration and DXF import.
 - Native DWG import (requires a separate compatibility/licensing decision).
@@ -116,6 +121,16 @@ All files remain local to the browser unless explicitly exported. Clearing brows
 - Perimeter gaps, thresholds, skirting, cut optimisation and offcut reuse.
 - Scenario comparisons and PDF quantity reports.
 
+## Editing room geometry
+
+Choose **L-shaped room** for a six-vertex starting outline, or **Custom polygon** to edit the current outline. **Edit shape** displays numbered handles. Select a point by dragging it or choosing its number in the sidebar; edit its X/Y coordinates, add a midpoint after it, or remove it. Dragging snaps to 50 mm by default; turn the checkbox off for 1 mm steps. One completed drag is one undo step. Escape cancels a drag. Invalid moves are rejected and the last valid shape is kept.
+
+Width/depth are the enclosing coordinate envelope, not individual wall lengths. Resizing scales vertices and pillars proportionally. Vertices must stay within this envelope. Crossed/touching edges, folded edges and degenerate polygons are rejected. Redundant collinear points are allowed and removed only in the computational triangulation copy.
+
+**Pillars & exclusions** adds a rectangular hole in a free position. Select a pillar and enter X/Y, width and depth; X/Y indicate its top-left corner. Pillars must be strictly inside the room and must not overlap or touch one another. An incompatible room-shape change is rejected instead of deleting pillars. Holes touching the perimeter must be represented by editing the outer outline.
+
+The optional division is still one horizontal or vertical line, intersected with the actual floor. Each side has its own material. A source tile is counted once within an area even if it produces disconnected fragments. Separate regions are counted independently; no pooling/reuse across them is assumed. Cut feasibility, tool access, kerf and installation of disconnected pieces are not checked.
+
 ## Verification
 
-30 automated tests cover geometry, pattern coverage without overlaps, rotated patterns, joints, optimization, legacy project migration and JSON roundtrips. Desktop browser checks confirmed the gallery, herringbone, automatic parquet length, independent hexagonal areas, direct dragging, hexagon optimization/application, persistence after reload and the one-third offset control. Mobile CSS is included but has not been tested on a physical device. This package has not been deployed to your GitHub repository.
+45 automated tests cover geometry, pattern coverage, rotated patterns, joints, optimization, legacy migration, JSON roundtrips, concave rooms and pillar subtraction. Exact examples include an L-room requiring ten uncut 500 mm tiles and a 1 m² source tile with a 200 × 200 mm pillar removed, counted once with 0.04 m² of offcut. Desktop browser checks cover L-room creation, pillar insertion, vertex dragging and numeric editing, undo, vertex insertion/removal, multiple materials, optimization and reload persistence. Mobile CSS is included but has not been tested on a physical device. This package has not been deployed to your GitHub repository.

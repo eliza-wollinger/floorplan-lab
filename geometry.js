@@ -1,3 +1,4 @@
+import {clipConvex,roomCells,outlineOf,rectangle as roomRectangle,roomPath} from './room-geometry.js';
 // All geometry is in millimetres; display zoom never changes model values.
 export const area = p => Math.abs(p.reduce((s,a,i)=>{const b=p[(i+1)%p.length];return s+a[0]*b[1]-b[0]*a[1]},0))/2;
 export function clipRect(poly, r){
@@ -58,18 +59,20 @@ export function layout(rect, m, {collect=true}={}){
  for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){
   const dx=i*u[0]+j*v[0],dy=i*u[1]+j*v[1];
   for(const template of def.templates){
-   const original=template.map(([x,y])=>rot([x+dx,y+dy])),polygon=clipRect(original,rect),a=area(polygon);
+   const original=template.map(([x,y])=>rot([x+dx,y+dy])),polygon=clipRect(original,rect);
+   const fragments=rect.cells?rect.cells.map(cell=>clipConvex(polygon,cell)).filter(p=>area(p)>1e-7):[polygon],a=fragments.reduce((sum,p)=>sum+area(p),0);
    if(a<.01)continue;
    const isCut=Math.abs(a-def.sourceArea)>.1;
    if(isCut)cut++;else full++;covered+=a;
-   if(collect)pieces.push({polygon,cut:isCut});
+   if(collect)pieces.push(rect.cells?{polygon:fragments[0],fragments,source:original,cut:isCut}:{polygon,cut:isCut});
   }
  }
  const count=full+cut,recommended=Math.ceil(count*(1+m.reserve/100)-1e-9),boxes=Math.ceil(recommended/m.box);
- return {pieces,full,cut,count,covered,sourceArea:def.sourceArea,offcut:Math.max(0,count*def.sourceArea-covered)/1e6,area:rect.w*rect.h/1e6,recommended,boxes,buy:boxes*m.box,cost:boxes*m.price};
+ return {pieces,full,cut,count,covered,sourceArea:def.sourceArea,offcut:Math.max(0,count*def.sourceArea-covered)/1e6,area:(rect.surfaceArea??rect.w*rect.h)/1e6,recommended,boxes,buy:boxes*m.box,cost:boxes*m.price};
 }
 export function regions(room){
-  if(room.split==='none')return [{x:0,y:0,w:room.w,h:room.h}];
-  if(room.split==='vertical')return [{x:0,y:0,w:room.at,h:room.h},{x:room.at,y:0,w:room.w-room.at,h:room.h}];
-  return [{x:0,y:0,w:room.w,h:room.at},{x:0,y:room.at,w:room.w,h:room.h-room.at}];
+ const rects=room.split==='none'?[{x:0,y:0,w:room.w,h:room.h}]:room.split==='vertical'?[{x:0,y:0,w:room.at,h:room.h},{x:room.at,y:0,w:room.w-room.at,h:room.h}]:[{x:0,y:0,w:room.w,h:room.at},{x:0,y:room.at,w:room.w,h:room.h-room.at}];
+ if(!(room.holes?.length)&&JSON.stringify(outlineOf(room))===JSON.stringify(roomRectangle(0,0,room.w,room.h)))return rects;
+ const cells=roomCells(room),path=roomPath(room);
+ return rects.map(r=>{const clipped=cells.map(p=>clipRect(p,r)).filter(p=>area(p)>1e-7);return {...r,cells:clipped,surfaceArea:clipped.reduce((s,p)=>s+area(p),0),roomPath:path};});
 }
